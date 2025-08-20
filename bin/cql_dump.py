@@ -11,8 +11,8 @@ This is somewhat similar to the plain SQL output by mysqldump and pg_dump.
 import sys
 import argparse
 import logging
-import cassandra.cluster
-from cassandra.encoder import cql_encode_all_types
+from cassandra.cluster import Cluster
+from cassandra.encoder import Encoder
 
 def main():
     """CLI entry-point"""
@@ -63,10 +63,10 @@ def make_row_factory(keyspace, column_family):
     def _factory(colnames, rows):
         columns = ', '.join('"%s"' % col for col in colnames)
         for row in rows:
-            values = ', '.join(cql_encode_all_types(val).decode('utf-8') for val in row)
+            values = ', '.join(Encoder.cql_encode_all_types(val).decode('utf-8') for val in row)
             yield "INSERT INTO %s.%s (%s) VALUES (%s)" % (
                 keyspace, column_family, columns, values)
-    
+
     return _factory
 
 
@@ -86,7 +86,7 @@ def output_results(result_rows):
     for row in result_rows:
         bytes = (row+';\n').encode('utf-8')
         sys.stdout.write(bytes)
-        
+
 
 
 if __name__ == '__main__':
