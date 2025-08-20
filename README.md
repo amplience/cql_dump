@@ -20,9 +20,7 @@ Dumping Data:
 -------------
 Usage:
 
-```cql_dump.py [-h] [-d] [-H HOSTS] [-p PORT]
-	   [-L LIMIT] [-t TIMEOUT] [-W WHERE]
-       keyspace column_family```
+```cql_dump.py [-h] [-d] [-H HOSTS] [-p PORT] [-sb SECURE_CONNECT_BUNDLE] [-ap APPLICATION_TOKEN] [-L LIMIT] [-t TIMEOUT] [-W WHERE] keyspace column_family```
 
 Example:
 
@@ -44,7 +42,7 @@ Requirements
 What made this project so simple is the great work behind the python *cassandra-driver* by
 *datastax*. We require the betta version to be installed:
 
-(```sudo pip install cassandra-driver==2.0.1```)
+(```sudo pip install cassandra-driver==3.29.2```)
 
 
 Todo

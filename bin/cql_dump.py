@@ -12,7 +12,9 @@ import sys
 import argparse
 import logging
 from cassandra.cluster import Cluster
+from cassandra.auth import PlainTextAuthProvider
 from cassandra.encoder import Encoder
+from cassandra.util import sortedset
 
 def main():
     """CLI entry-point"""
@@ -27,6 +29,10 @@ def main():
                         help='comma-separated list of hosts in the cluster')
     parser.add_argument('-p', '--port', type=int, default=9042,
                         help='Cassandra CQL native transport port')
+    parser.add_argument('-sb', '--secure-connect-bundle',
+                        help='Secure connect bunde location (for Astra DB)')
+    parser.add_argument('-ap', '--application-token',
+                        help='Application token for Astra DB')
     parser.add_argument('-L', '--limit', type=int, default=10000,
                         help='Add a LIMIT to the select query')
     parser.add_argument('-t', '--timeout', type=int, default=10,
@@ -38,7 +44,15 @@ def main():
 
     logging.getLogger().setLevel(logging.DEBUG if args.debug else logging.INFO)
 
-    session = setup_session(args.hosts, args.port)
+    if args.hosts:
+        session = setup_session(args.hosts, args.port)
+    elif args.secure_connect_bundle is not None and args.application_token is not None:
+      session = setup_astra_session(args.secure_connect_bundle, args.application_token)
+    else:
+        logging.error("You must specify either --hosts or both --secure-connect-bundle and --application-token")
+        parser.print_help()
+        sys.exit(1)
+
     session.row_factory = make_row_factory(args.keyspace, args.column_family)
     session.default_fetch_size = 5
     session.default_timeout = args.timeout
@@ -48,6 +62,16 @@ def main():
     logging.debug("Executing query: %s", query)
     output_results(session.execute(query))
 
+def setup_astra_session(secure_connect_bundle, application_token):
+    """Connect to a AstraDB cluster"""
+    cloud_config = {
+        'secure_connect_bundle': secure_connect_bundle
+    }
+    auth_provider = PlainTextAuthProvider(username='token', password=application_token)
+    cluster = Cluster(cloud=cloud_config, auth_provider=auth_provider)
+    session = cluster.connect()
+
+    return session
 
 def setup_session(csv_hosts, port):
     """Connect to a Cassandra cluster"""
@@ -60,10 +84,12 @@ def setup_session(csv_hosts, port):
 
 def make_row_factory(keyspace, column_family):
     """Prepare INSERT statements for each row in the column family"""
+    encoder = Encoder()
+    encoder.mapping[tuple] = encoder.cql_encode_tuple
     def _factory(colnames, rows):
         columns = ', '.join('"%s"' % col for col in colnames)
         for row in rows:
-            values = ', '.join(Encoder.cql_encode_all_types(val).decode('utf-8') for val in row)
+            values = ', '.join(encoder.cql_encode_all_types(val) for val in row)
             yield "INSERT INTO %s.%s (%s) VALUES (%s)" % (
                 keyspace, column_family, columns, values)
 
@@ -84,9 +110,7 @@ def prepare_query(column_family, where_clause, limit):
 def output_results(result_rows):
     """Output the results to STDOUT"""
     for row in result_rows:
-        bytes = (row+';\n').encode('utf-8')
-        sys.stdout.write(bytes)
-
+        sys.stdout.write(row+';\n')
 
 
 if __name__ == '__main__':
